@@ -40,7 +40,9 @@ INSTALLED_APPS = [
     'rest_framework',
     'corsheaders',
     'order',
+    'users',
     'drf_spectacular',
+
 ]
 
 MIDDLEWARE = [
@@ -162,3 +164,5 @@ SPECTACULAR_SETTINGS = {
     # Hii itasaidia kuonyesha fomu za Login vizuri
     'COMPONENT_SPLIT_PATCH': True,
 }
+
+AUTH_USER_MODEL = 'users.User'

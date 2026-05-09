@@ -1,58 +1,76 @@
-from rest_framework import generics, permissions, filters
+from rest_framework import viewsets, permissions, filters, status
+from rest_framework.response import Response
 from rest_framework_simplejwt.authentication import JWTAuthentication
 from django_filters.rest_framework import DjangoFilterBackend
+from django.db.models import Sum, F
+
 from .models import Order
 from .serializers import OrderSerializer
 
 # ==============================================================================
-# VIEW: OrderList
-# RESPONSIBILITY: Handles listing and creation of order records.
-# ARCHITECTURE: Part of the API/Service layer in the 5-Layer Communication Chain.
-# SECURITY: Implements JWT Authentication and Row-Level Security (Data Isolation).
-# FEATURES: Supports history tracking via date ordering and filtering.
+# VIEWSET: OrderViewSet
+# ROLE: High-level controller for managing the Order Lifecycle.
+# ARCHITECTURE: Implements the N-Tier Service Layer for aXeraf Technologies.
+# SECURITY: JWT-based Authentication with strict Row-Level Data Isolation.
 # ==============================================================================
-class OrderList(generics.ListCreateAPIView):
+class OrderViewSet(viewsets.ModelViewSet):
     """
-    Concrete view for listing orders belonging to the authenticated waiter 
-    and allowing the creation of new orders with automated waiter assignment.
+    A professional ViewSet for handling Order transactions.
+    - Waiters: Can only view and manage their own assigned orders.
+    - Managers: Have visibility over all system orders for financial auditing.
     """
     serializer_class = OrderSerializer
-
-    # ENFORCING STRICT AUTHENTICATION AND PERMISSION LAYERS
-    # --------------------------------------------------------------------------
-    # Mandatory login via JWT is enforced here.
     authentication_classes = [JWTAuthentication]
     permission_classes = [permissions.IsAuthenticated]
     
-    # Adding support for filtering and searching in the history
-    filter_backends = [DjangoFilterBackend, filters.SearchFilter]
-    search_fields = ['food_item', 'table_number']
+    # Advanced Filtering and Search capabilities
+    filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
+    filterset_fields = ['status', 'table_number']
+    search_fields = ['menu_item__item_name', 'table_number']
+    ordering_fields = ['created_at', 'status']
 
-    # DATA ISOLATION & HISTORY LOGIC (VYUMBA NA MUDA)
+    # --------------------------------------------------------------------------
+    # DATA ISOLATION LOGIC
     # --------------------------------------------------------------------------
     def get_queryset(self):
         """
-        1. Isolation: Filters orders so waiters only see their own data.
-        2. History: Orders the results by 'created_at' descending (Newest first).
-        3. Dynamic Filtering: Allows filtering by specific date via query parameters.
+        Retrieves the queryset based on user role.
+        1. Staff/Admin: Can view all orders in the system.
+        2. Waiter: Limited to orders where waiter_id == current_user_id.
         """
         user = self.request.user
-        queryset = Order.objects.filter(waiter=user).order_by('-created_at')
+        
+        # Optimization: select_related reduces database hits for Menu data
+        base_queryset = Order.objects.select_related('menu_item', 'waiter').order_by('-created_at')
 
-        # Logic for filtering by date (e.g., /api/order/?date=2026-05-09)
-        order_date = self.request.query_params.get('date')
-        if order_date:
-            queryset = queryset.filter(created_at__date=order_date)
-            
-        return queryset
+        if user.is_staff:
+            return base_queryset
+        
+        # Row-level security for regular waiters
+        return base_queryset.filter(waiter=user)
 
+    # --------------------------------------------------------------------------
     # SERVER-FIRST INTEGRITY RULE
     # --------------------------------------------------------------------------
     def perform_create(self, serializer):
         """
-        Server-side validation: Automatically attaches the logged-in waiter 
-        to the order. State is only confirmed after a successful 201 Created.
+        Ensures the 'waiter' field is automatically populated from the JWT token.
+        This prevents unauthorized waiters from creating orders on behalf of others.
         """
-        # Automatically set the 'waiter' to the current authenticated user.
-        # 'status' defaults to 'pending' as defined in the Model.
         serializer.save(waiter=self.request.user)
+
+    # --------------------------------------------------------------------------
+    # FINANCIAL LOGIC: Table Bill Calculation
+    # --------------------------------------------------------------------------
+    def get_table_total(self, table_number):
+        """
+        Calculates the outstanding balance for a specific table.
+        Logic: Sum of (Menu Price * Quantity) for all 'unpaid' orders.
+        """
+        return Order.objects.filter(
+            table_number=table_number
+        ).exclude(
+            status__in=['cancelled', 'paid']
+        ).aggregate(
+            total=Sum(F('menu_item__price') * F('quantity'))
+        )['total'] or 0

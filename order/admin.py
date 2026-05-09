@@ -1,24 +1,24 @@
 from django.contrib import admin
-from .models import Order  # Updated from Oda to Order to match global standards
+from .models import Order
 
 # ==============================================================================
 # ADMIN CONFIGURATION: OrderAdmin
 # ROLE: Provides a professional interface for managing orders.
-# FEATURES: List filtering, searching, and status management.
+# ARCHITECTURE: Part of the Internal Management Layer for aXeraf Technologies.
 # ==============================================================================
 @admin.register(Order)
 class OrderAdmin(admin.ModelAdmin):
-    # Columns to be displayed in the Admin table
-    list_display = ('id', 'food_item', 'table_number', 'waiter', 'status', 'created_at')
+    # REFACTORED: We use 'menu_item' instead of the deleted 'food_item'
+    list_display = ('id', 'menu_item', 'table_number', 'waiter', 'status', 'created_at')
     
-    # Professional filtering options for business reporting
+    # Professional filtering options for business reporting and auditing
     list_filter = ('status', 'waiter', 'created_at')
     
-    # Search functionality to quickly find specific orders
-    search_fields = ('food_item', 'table_number', 'waiter__username')
+    # SEARCH LOGIC: Using double underscore (__) to search the Menu Table's name field
+    search_fields = ('menu_item__item_name', 'table_number', 'waiter__username')
     
-    # Default ordering to show the most recent orders first
+    # Default ordering to show the most recent orders first (Reverse Chronological)
     ordering = ('-created_at',)
 
-    # Ensuring fields like 'created_at' are visible but not editable
+    # Ensuring financial integrity by making timestamp read-only
     readonly_fields = ('created_at',)

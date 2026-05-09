@@ -21,7 +21,9 @@ urlpatterns = [
 
     # 2. Business Logic: Order Management System (OMS)
     # Refactored from 'oda/' to 'order/' for global naming standards.
+    path('api/menu/', include('menu.urls')),
     path('api/order/', include('order.urls')),
+    path('api/payment/', include('payment.urls')),
 
     # --- API Documentation (Swagger & OpenAPI) ---
     # Generates a professional API map for frontend integration and testing.

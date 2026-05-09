@@ -39,7 +39,9 @@ INSTALLED_APPS = [
     
     # Internal Apps
     'users.apps.UsersConfig',                 # Identity & Access Management (Kelvin's App)
-    'order',                                  #   Business Logic App
+    'order',  
+    'menu',    
+    'payment',                        #   Business Logic App
 ]
 
 MIDDLEWARE = [

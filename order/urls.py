@@ -1,6 +1,7 @@
 from django.urls import path
-from .views import OdaList
+from .views import OrderList  
 
 urlpatterns = [
-    path('oda/', OdaList.as_view(), name='oda-list'),
+
+    path('order/', OrderList.as_view(), name='order-list'),
 ]

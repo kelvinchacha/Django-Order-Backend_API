@@ -34,7 +34,8 @@ INSTALLED_APPS = [
     'rest_framework',
     'rest_framework_simplejwt', # Kwa ajili ya Token-based Auth
     'corsheaders',             # Inaruhusu React Native kuvuta data
-    'drf_spectacular',         # Swagger Documentation
+    'drf_spectacular', 
+    'django_filters',       # Swagger Documentation
     
     # Internal Apps
     'users.apps.UsersConfig',                 # Identity & Access Management (Kelvin's App)

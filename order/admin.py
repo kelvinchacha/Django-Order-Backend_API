@@ -1,24 +1,73 @@
+"""
+Module: order.admin
+Description: High-level Audit and Transaction Monitoring.
+             Designed for Financial Integrity and Kitchen Workflow Oversight.
+Architect: Kelvin Chacha
+"""
 from django.contrib import admin
 from .models import Order
 
-# ==============================================================================
-# ADMIN CONFIGURATION: OrderAdmin
-# ROLE: Provides a professional interface for managing orders.
-# ARCHITECTURE: Part of the Internal Management Layer for aXeraf Technologies.
-# ==============================================================================
 @admin.register(Order)
 class OrderAdmin(admin.ModelAdmin):
-    # REFACTORED: We use 'menu_item' instead of the deleted 'food_item'
-    list_display = ('id', 'menu_item', 'table_number', 'waiter', 'status', 'created_at')
+    """
+    Architectural customization of the Order Admin interface.
+    Focuses on dual-status tracking and financial auditing.
+    """
     
-    # Professional filtering options for business reporting and auditing
-    list_filter = ('status', 'waiter', 'created_at')
+    # Grid View: Adding seat_label, prices, and dual statuses
+    list_display = (
+        'id', 
+        'table_reference', 
+        'menu_item', 
+        'quantity', 
+        'total_price', 
+        'kitchen_status', 
+        'payment_status', 
+        'waiter', 
+        'created_at'
+    )
     
-    # SEARCH LOGIC: Using double underscore (__) to search the Menu Table's name field
-    search_fields = ('menu_item__item_name', 'table_number', 'waiter__username')
+    # Audit Filters: Crucial for Managerial Reporting
+    list_filter = (
+        'payment_status', 
+        'kitchen_status', 
+        'waiter', 
+        'table_number', 
+        'created_at'
+    )
     
-    # Default ordering to show the most recent orders first (Reverse Chronological)
-    ordering = ('-created_at',)
+    # Deep Search: Across related models
+    search_fields = (
+        'table_number', 
+        'menu_item__item_name', 
+        'waiter__username', 
+        'waiter__phone_number'
+    )
+    
+    # Management Actions: Allows Manager to mark multiple items as Paid quickly
+    list_editable = ('kitchen_status', 'payment_status')
+    
+    # Security: Financial data must remain immutable in the Admin panel
+    readonly_fields = ('unit_price', 'total_price', 'created_at', 'updated_at')
 
-    # Ensuring financial integrity by making timestamp read-only
-    readonly_fields = ('created_at',)
+    # Custom Field for Cleaner UI
+    def table_reference(self, obj):
+        """Combines Table Number and Seat Label for easier identification."""
+        return f"T-{obj.table_number} [Seat {obj.seat_label}]"
+    table_reference.short_description = 'Location'
+
+    fieldsets = (
+        ('Transaction Identity', {
+            'fields': ('waiter', 'menu_item', 'quantity')
+        }),
+        ('Location Details', {
+            'fields': ('table_number', 'seat_label')
+        }),
+        ('Workflow & Financial Status', {
+            'fields': ('kitchen_status', 'payment_status')
+        }),
+        ('Audit Logs (Read-Only)', {
+            'fields': ('unit_price', 'total_price', 'created_at', 'updated_at'),
+            'classes': ('collapse',), # Hides sensitive audit data by default
+        }),
+    )

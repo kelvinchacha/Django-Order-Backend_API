@@ -20,6 +20,7 @@ class MyTokenObtainPairSerializer(TokenObtainPairSerializer):
         token = super().get_token(user)
 
         # Custom claims for the Communication Chain (Layer 3: Context)
+        # We ensure the role is passed in the token for decentralized verification
         token['username'] = user.username
         token['role'] = user.role
         token['is_default_password'] = user.is_default_password
@@ -29,12 +30,13 @@ class MyTokenObtainPairSerializer(TokenObtainPairSerializer):
     def validate(self, attrs):
         """
         Enhancing the validation response to include user details 
-        directly in the login response body.
+        directly in the login response body for immediate state hydration.
         """
         data = super().validate(attrs)
         
-        # Hizi data zitarudi kwenye 'response.data' wakati wa login
+        # User details returned in 'response.data' upon successful login
         data['user'] = {
+            'id': self.user.id,
             'username': self.user.username,
             'phone_number': self.user.phone_number,
             'role': self.user.role,
@@ -49,4 +51,4 @@ class MyTokenObtainPairView(TokenObtainPairView):
     Accepts phone_number and password to return JWT access/refresh tokens.
     """
     serializer_class = MyTokenObtainPairSerializer
-    permission_classes = [AllowAny] # Inaruhusu kila mtumiaji kujaribu kuingia
+    permission_classes = [AllowAny] # Allows public access for authentication

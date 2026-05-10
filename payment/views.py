@@ -1,50 +1,64 @@
-from rest_framework import generics, permissions, status # Hapa ndipo tulipoimarisha
+"""
+Module: payments.views
+Description: Revenue management and financial auditing controllers.
+             Optimized for End-of-Day (EOD) reporting and real-time reconciliations.
+Architect: Kelvin Chacha
+"""
+
+from rest_framework import generics, permissions, status
 from rest_framework.views import APIView
 from rest_framework.response import Response
-from django.db.models import Sum
+from django.db.models import Sum, Count  # Import Count hapa kitalaamu
 from django.utils import timezone
 
 from .models import Payment
 from .serializers import PaymentSerializer
-from order.models import Order
 
-# ==============================================================================
-# VIEW: PaymentCreate
-# ROLE: Handles payment processing and order status transition.
-# ==============================================================================
-class PaymentCreate(generics.CreateAPIView):
+class PaymentCreateView(generics.CreateAPIView):
+    """
+    Handles the creation of new payment records.
+    Note: The 'paid' status update for Orders is now handled 
+    within the Serializer's atomic transaction for better integrity.
+    """
     queryset = Payment.objects.all()
     serializer_class = PaymentSerializer
     permission_classes = [permissions.IsAuthenticated]
 
-    def perform_create(self, serializer):
-        payment = serializer.save()
-        # Server-First Integrity: Update Order to 'paid'
-        order = payment.order
-        order.status = 'paid'
-        order.save()
-
-# ==============================================================================
-# VIEW: DailySummaryView
-# ROLE: Financial auditing for managers (EOD Report).
-# ==============================================================================
-class DailySummaryView(APIView):
+class RevenueDashboardView(APIView):
+    """
+    EXECUTIVE DASHBOARD:
+    Provides a deep-dive into the day's financial performance.
+    Only accessible by Managers and Admins.
+    """
     permission_classes = [permissions.IsAdminUser]
 
     def get(self, request):
         today = timezone.now().date()
+        payments_today = Payment.objects.filter(paid_at__date=today)
         
-        summary = Payment.objects.filter(paid_at__date=today).values('payment_method').annotate(
-            total_amount=Sum('amount_paid')
+        # 1. Break down by Payment Method
+        # Tunatumia Count('id') moja kwa moja hapa
+        method_summary = payments_today.values('payment_method').annotate(
+            total_collected=Sum('total_amount'),
+            transaction_count=Count('id')
         )
 
-        grand_total = Payment.objects.filter(paid_at__date=today).aggregate(
-            total=Sum('amount_paid')
-        )['total'] or 0
+        # 2. Grand Totals (Actual Cash vs Expected Bill)
+        totals = payments_today.aggregate(
+            grand_total=Sum('total_amount'),
+            total_received=Sum('amount_received'),
+            total_change=Sum('change_given')
+        )
 
         return Response({
-            "date": today,
-            "summary_by_method": list(summary),
-            "grand_total": grand_total,
-            "currency": "TZS"
+            "audit_date": today,
+            "performance_metrics": {
+                "total_revenue": totals['grand_total'] or 0,
+                "total_cash_handled": totals['total_received'] or 0,
+                "total_change_issued": totals['total_change'] or 0,
+                "transaction_volume": payments_today.count()
+            },
+            "breakdown": list(method_summary),
+            "currency": "TZS",
+            "status": "Finalized" if timezone.now().hour > 22 else "In-Progress"
         }, status=status.HTTP_200_OK)

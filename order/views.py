@@ -1,76 +1,76 @@
-from rest_framework import viewsets, permissions, filters, status
+"""
+Module: order.views
+Description: Identity-Aware Transaction Controller. 
+             Optimized for Kitchen Workflows and Granular Billing.
+Architect: Kelvin Chacha
+"""
+
+from rest_framework import viewsets, permissions, status
+from rest_framework.decorators import action
 from rest_framework.response import Response
-from rest_framework_simplejwt.authentication import JWTAuthentication
-from django_filters.rest_framework import DjangoFilterBackend
-from django.db.models import Sum, F
+from django.db.models import Sum
 
 from .models import Order
 from .serializers import OrderSerializer
 
-# ==============================================================================
-# VIEWSET: OrderViewSet
-# ROLE: High-level controller for managing the Order Lifecycle.
-# ARCHITECTURE: Implements the N-Tier Service Layer for aXeraf Technologies.
-# SECURITY: JWT-based Authentication with strict Row-Level Data Isolation.
-# ==============================================================================
 class OrderViewSet(viewsets.ModelViewSet):
     """
-    A professional ViewSet for handling Order transactions.
-    - Waiters: Can only view and manage their own assigned orders.
-    - Managers: Have visibility over all system orders for financial auditing.
+    A professional ViewSet for handling the Order Lifecycle.
+    - Waiters: View and manage their own table assignments.
+    - Chefs: View all pending kitchen tickets regardless of waiter.
+    - Managers: Audit all financial transactions.
     """
     serializer_class = OrderSerializer
-    authentication_classes = [JWTAuthentication]
     permission_classes = [permissions.IsAuthenticated]
-    
-    # Advanced Filtering and Search capabilities
-    filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
-    filterset_fields = ['status', 'table_number']
-    search_fields = ['menu_item__item_name', 'table_number']
-    ordering_fields = ['created_at', 'status']
 
-    # --------------------------------------------------------------------------
-    # DATA ISOLATION LOGIC
-    # --------------------------------------------------------------------------
     def get_queryset(self):
         """
-        Retrieves the queryset based on user role.
-        1. Staff/Admin: Can view all orders in the system.
-        2. Waiter: Limited to orders where waiter_id == current_user_id.
+        DATA ISOLATION LAYER (IAM Integration):
+        Logic: Filters orders based on the operational role of the requester.
         """
         user = self.request.user
-        
-        # Optimization: select_related reduces database hits for Menu data
-        base_queryset = Order.objects.select_related('menu_item', 'waiter').order_by('-created_at')
+        queryset = Order.objects.select_related('menu_item', 'waiter')
 
-        if user.is_staff:
-            return base_queryset
-        
-        # Row-level security for regular waiters
-        return base_queryset.filter(waiter=user)
+        # 1. ADMIN/MANAGER: Total Visibility
+        if user.role in ['ADMIN', 'MANAGER']:
+            return queryset
 
-    # --------------------------------------------------------------------------
-    # SERVER-FIRST INTEGRITY RULE
-    # --------------------------------------------------------------------------
+        # 2. CHEF: Kitchen Visibility (Sees all items that need cooking)
+        if user.role == 'CHEF':
+            return queryset.filter(kitchen_status__in=['pending', 'cooking'])
+
+        # 3. WAITER: Service Visibility (Sees their own assigned orders only)
+        return queryset.filter(waiter=user)
+
+    @action(detail=False, methods=['get'])
+    def bill_summary(self, request):
+        """
+        FINANCIAL LOGIC: Supports Split-Billing (by Table or by Seat).
+        Usage: /api/order/orders/bill_summary/?table=5&seat=A
+        """
+        table = request.query_params.get('table')
+        seat = request.query_params.get('seat') # Optional seat parameter
+
+        if not table:
+            return Response({"detail": "Table number is required."}, status=400)
+
+        filters = {'table_number': table, 'payment_status': 'unpaid'}
+        if seat:
+            filters['seat_label'] = seat
+
+        orders = Order.objects.filter(**filters)
+        total = orders.aggregate(total=Sum('total_price'))['total'] or 0
+
+        return Response({
+            "table": table,
+            "seat": seat if seat else "All Seats",
+            "total_amount": total,
+            "item_count": orders.count()
+        })
+
     def perform_create(self, serializer):
         """
-        Ensures the 'waiter' field is automatically populated from the JWT token.
-        This prevents unauthorized waiters from creating orders on behalf of others.
+        SERVER-FIRST INTEGRITY:
+        Automatic assignment of the 'waiter' from the authenticated context.
         """
         serializer.save(waiter=self.request.user)
-
-    # --------------------------------------------------------------------------
-    # FINANCIAL LOGIC: Table Bill Calculation
-    # --------------------------------------------------------------------------
-    def get_table_total(self, table_number):
-        """
-        Calculates the outstanding balance for a specific table.
-        Logic: Sum of (Menu Price * Quantity) for all 'unpaid' orders.
-        """
-        return Order.objects.filter(
-            table_number=table_number
-        ).exclude(
-            status__in=['cancelled', 'paid']
-        ).aggregate(
-            total=Sum(F('menu_item__price') * F('quantity'))
-        )['total'] or 0

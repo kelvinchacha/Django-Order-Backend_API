@@ -1,10 +1,7 @@
-from django.db import models
-
-# Create your models here.
 """
 Module: users.models
-Description: Custom user model to handle phone-based authentication and 
-             role-based access control (RBAC) for the Order System.
+Description: Re-engineered User model for aXeraf Technologies.
+             Supports multi-role RBAC (Admin, Manager, Chef, Waiter).
 Architect: Kelvin Chacha
 """
 
@@ -13,50 +10,54 @@ from django.db import models
 
 class User(AbstractUser):
     """
-    Extends the base AbstractUser to support phone_number as the primary identifier.
-    Includes business-specific roles and security enforcement flags.
+    Extends AbstractUser to support phone-based identity and 4-tier roles.
+    Integrates with the 5-Layer Communication Chain.
     """
 
-    # --- Role Definitions ---
-    # We define roles as constants to avoid hardcoding strings in the logic
+    # --- Role Constants (The 4-Role Model) ---
     ADMIN = 'ADMIN'
+    MANAGER = 'MANAGER'
+    CHEF = 'CHEF'
     WAITER = 'WAITER'
     
     ROLE_CHOICES = (
-        (ADMIN, 'Admin'),
-        (WAITER, 'Waiter'),
+        (ADMIN, 'Admin/System Owner'),
+        (MANAGER, 'Business Manager'),
+        (CHEF, 'Kitchen Controller'),
+        (WAITER, 'Service Waiter'),
     )
     
     # --- Custom Fields ---
     
-    # Primary identity field for the business (Unique for each staff)
     phone_number = models.CharField(
         max_length=15, 
         unique=True,
         help_text="Primary identifier for system login."
     )
     
-    # Determines the access level within the application
     role = models.CharField(
         max_length=10, 
         choices=ROLE_CHOICES, 
-        default=WAITER
+        default=WAITER,
+        db_index=True # Added index for faster filtering in large datasets
     )
     
-    # Security Enforcement: True if user must reset their generated password
     is_default_password = models.BooleanField(
         default=True,
-        help_text="Forces a password change request on first login."
+        help_text="Security flag to force password reset on first login."
     )
 
     # --- Authentication Configuration ---
     
-    # Set phone_number as the field used for authentication instead of username
+    # Critical: Uses phone_number for authentication logic
     USERNAME_FIELD = 'phone_number'
     
-    # Required when creating a superuser via 'createsuperuser' CLI
+    # Required for 'python manage.py createsuperuser'
     REQUIRED_FIELDS = ['username'] 
 
+    class Meta:
+        verbose_name = "System User"
+        verbose_name_plural = "System Users"
+
     def __str__(self):
-        """Returns the string representation of the user."""
-        return f"{self.phone_number} ({self.role})"
+        return f"{self.phone_number} - {self.get_role_display()}"

@@ -1,7 +1,8 @@
 """
 Module: users.admin
-Description: Admin panel configuration for User management.
-             Customized for Phone Number authentication.
+Description: High-level Admin panel configuration for Identity and Access Management (IAM).
+             Customized for Phone Number authentication and RBAC monitoring.
+Architect: Kelvin Chacha
 """
 from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin
@@ -10,29 +11,32 @@ from .models import User
 class CustomUserAdmin(UserAdmin):
     """
     Architectural customization of the Django Admin interface 
-    to handle Kelvin's custom User model.
+    to handle Kelvin's custom User model and role-based permissions.
     """
     model = User
     
-    # Inaonyesha safu hizi kwenye orodha ya watumiaji
-    list_display = ('phone_number', 'username', 'role', 'is_staff', 'is_default_password')
+    # Visual Matrix: What the Manager sees in the staff list view
+    list_display = ('phone_number', 'username', 'role', 'is_active', 'is_default_password')
     
-    # Inaweka filters upande wa kulia
-    list_filter = ('role', 'is_staff', 'is_superuser', 'is_active')
+    # Audit Filters: Quickly isolate Staff by their operational roles
+    list_filter = ('role', 'is_staff', 'is_active')
     
-    # Sehemu za kuongeza na kurekebisha mtumiaji (Form fields)
-    fieldsets = UserAdmin.fieldsets + (
-        ('Business Logic Fields', {'fields': ('role', 'phone_number', 'is_default_password')}),
-    )
-    
-    # Sehemu ya kutengeneza mtumiaji mpya
-    add_fieldsets = UserAdmin.add_fieldsets + (
-        ('Business Logic Fields', {'fields': ('role', 'phone_number', 'is_default_password')}),
-    )
-    
-    # Namna ya kutafuta watumiaji
+    # Search Optimization: Indexed fields for rapid staff retrieval
     search_fields = ('phone_number', 'username')
     ordering = ('phone_number',)
 
-# Sajili Model yako na CustomAdmin uliyotengeneza
+    # Form Configuration: Integrating Business Logic into User Management
+    # Adding our custom fields to the standard User change form
+    fieldsets = UserAdmin.fieldsets + (
+        ('aXeraf Business Logic', {'fields': ('role', 'phone_number', 'is_default_password')}),
+    )
+    
+    # Adding our custom fields to the User creation form
+    add_fieldsets = UserAdmin.add_fieldsets + (
+        ('aXeraf Business Logic', {
+            'fields': ('role', 'phone_number', 'is_default_password'),
+        }),
+    )
+
+# Official Registration of the IAM Model
 admin.site.register(User, CustomUserAdmin)
